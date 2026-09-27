@@ -39,7 +39,7 @@ def classify_message(text: str, state: ConversationState | None = None, merchant
     signals=[]
     previous = [str(t.get("body", "")).strip().lower() for t in (state.turns if state else []) if t.get("from") in ("merchant","customer")]
     repeated = bool(low and (low in previous or (merchant_memory and low in [str(x).lower() for x in merchant_memory.get("auto_reply_texts", [])])))
-    _OPTIONS = ("option 1", "option 2", "option a", "option b", "first one", "second one", "pehla", "dusra")
+    _OPTIONS = ("option", "vikalp", "first one", "second one", "third one", "pehla", "dusra", "teesra", "alternative")
     if any(x in low for x in _OPT_OUT): label="opt_out"; signals.append("explicit_opt_out")
     elif repeated or any(x in low for x in _AUTO): label="auto_reply"; signals.append("canned_or_repeated")
     elif any(x in low for x in _HOSTILE): label="hostile"; signals.append("hostile_language")
@@ -248,6 +248,17 @@ def _build_contextual_answer(state, text: str, bundle: dict | None, facts: dict 
         )
         return {"action": "send", "body": body, "cta": "open_ended", "rationale": "Presented educational value-first draft from dataset."}
 
+    # UNKNOWN OPTION (e.g. Option 3, Option 4, Option C, custom alternative, any other option)
+    if bool(re.search(r"\boption\s*([3-9]|[c-z]|\d{2,})\b", low)) or any(w in low for w in ["option 3", "option 4", "option 5", "option 6", "option c", "option d", "option e", "third", "teesra", "fourth", "chautha", "custom option", "other option", "another option", "different option", "alternative", "alternate", "koi aur option", "koi dusra option", "aur koi option", "kuch aur option", "kuch naya", "aur vikalp", "koi aur rasta", "extra option", "new option"]):
+        body = (
+            f"{prefix}I appreciate you thinking outside the box! While Options 1 & 2 are proven high-converting paths, an alternative or custom option (like a 48-hour flash incentive, VIP loyalty pass, or customized service bundle) can work very well for {shop_name}.\n\n"
+            f"For {shop_name} ({cat_slug}), what specific direction do you have in mind? For instance, we could bundle a complimentary add-on with your active {offer_str}, or design an exclusive weekend invitation. Tell me your idea and I'll draft it!"
+            if is_eng else
+            f"{prefix}Aapka alternative explore karna bahut accha move hai! Options 1 aur 2 standard high-converting paths hain, par ek custom option — jaise 48-hour flash weekend perk ya VIP loyalty invite — bhi {shop_name} ke liye badhiya kaam kar sakta hai.\n\n"
+            f"{shop_name} ({cat_slug}) ke liye aapke dimaag mein kya specific idea hai? Hum aapke active offer ({offer_str}) ke saath complimentary service bundle kar sakte hain ya koi special timing test kar sakte hain. Aap batayein, main turant draft create kar doonga!"
+        )
+        return {"action": "send", "body": body, "cta": "open_ended", "rationale": "Handled custom/unknown option constructively with tailored advice."}
+
     # 2. RESEARCH, CLINICAL, COMPLIANCE, GUIDELINES
     if any(w in low for w in ["research", "study", "jida", "dci", "compliance", "circular", "paper", "data", "clinical"]):
         if cat_slug == "dentists":
@@ -399,7 +410,22 @@ def _build_contextual_answer(state, text: str, bundle: dict | None, facts: dict 
         )
         return {"action": "send", "body": body, "cta": "open_ended", "rationale": "Recommended lapsed customer reactivation with concrete choices."}
 
-    # 8. GENERAL / GREETING / OPEN INQUIRY
+    # 8. GENERAL / GREETING / OPEN INQUIRY / UNKNOWN INQUIRY
+    is_greeting = any(w in low for w in ["hi", "hello", "hey", "namaste", "pranam"]) or len(low.split()) <= 1
+    if not is_greeting and len(text.strip().split()) > 1:
+        body = (
+            f"{prefix}That is an intriguing question regarding {shop_name} ({cat_slug})! Looking at it from local customer behavior and margin health in {locality or 'your market'}:\n\n"
+            f"1. Maintaining steady service quality and transparent pricing consistently outperforms extreme or unverified promotions.\n"
+            f"2. Testing any new concept with a pilot WhatsApp invitation to your regular customer base is the safest, highest-ROI way to validate demand.\n\n"
+            f"Would you like me to draft a pilot WhatsApp message to test this concept with your regular customers, or stick with your verified active offer ({offer_str})?"
+            if is_eng else
+            f"{prefix}Yeh {shop_name} ({cat_slug}) ke business ke liye ek unique aur interesting sawaal hai! Agar hum local footfall aur margin protection ke angle se dekhein:\n\n"
+            f"1. Service quality aur transparent pricing hamesha extreme discounting se behtar long-term result deti hai.\n"
+            f"2. Kisi bhi naye concept ko pehle 20-30 regular customers par WhatsApp invite ke through test karna sabse safe aur profitable hota hai.\n\n"
+            f"Kya aap chahenge ki main is idea par ek test WhatsApp draft banakar dikhaoon, ya hum aapke existing active offer ({offer_str}) par focus karein?"
+        )
+        return {"action": "send", "body": body, "cta": "open_ended", "rationale": "Constructively answered unknown question using business and merchant context."}
+
     topic = state.topic or "business update"
     body = (
         f"{prefix}I am Vera, your proactive retail business co-pilot for {shop_name}. I monitor your daily traffic ({views:,} views), active offers ({offer_str}), and category benchmarks so you never miss a revenue opportunity.\n\n"
