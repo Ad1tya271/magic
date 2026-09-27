@@ -21,32 +21,56 @@ from vera.ui import DASHBOARD_HTML
 app = FastAPI(title="Vera Bot", version=settings.version)
 _STARTED=time.monotonic()
 
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00","Z")
+
 def _preload_dataset_if_empty():
     if store.contexts.counts().get("category", 0) > 0:
         return
     from pathlib import Path
     import json
-    data_dir = Path(__file__).resolve().parent / "data" / "expanded"
-    if not data_dir.exists():
-        return
-    for p in (data_dir / "categories").glob("*.json"):
-        try: store.contexts.put("category", p.stem, 1, json.loads(p.read_text(encoding="utf-8")))
-        except Exception: pass
-    for p in (data_dir / "merchants").glob("*.json"):
-        try:
-            d = json.loads(p.read_text(encoding="utf-8"))
-            if d.get("merchant_id"): store.contexts.put("merchant", d["merchant_id"], 1, d)
-        except Exception: pass
-    for p in (data_dir / "triggers").glob("*.json"):
-        try:
-            d = json.loads(p.read_text(encoding="utf-8"))
-            if d.get("id"): store.contexts.put("trigger", d["id"], 1, d)
-        except Exception: pass
-    for p in (data_dir / "customers").glob("*.json"):
-        try:
-            d = json.loads(p.read_text(encoding="utf-8"))
-            if d.get("customer_id"): store.contexts.put("customer", d["customer_id"], 1, d)
-        except Exception: pass
+    now_ts = _now()
+    base = Path(__file__).resolve().parent
+    data_dirs = [base / "data" / "expanded", base.parent / "magicpin-ai-challenge" / "dataset"]
+    for data_dir in data_dirs:
+        if not data_dir.exists():
+            continue
+        cat_dir = data_dir / "categories"
+        if cat_dir.exists():
+            for p in cat_dir.glob("*.json"):
+                try:
+                    store.contexts.put("category", p.stem, 1, json.loads(p.read_text(encoding="utf-8")), stored_at=now_ts)
+                except Exception:
+                    pass
+        m_dir = data_dir / "merchants"
+        if m_dir.exists():
+            for p in m_dir.glob("*.json"):
+                try:
+                    d = json.loads(p.read_text(encoding="utf-8"))
+                    mid = d.get("merchant_id") or d.get("id") or p.stem
+                    store.contexts.put("merchant", mid, 1, d, stored_at=now_ts)
+                except Exception:
+                    pass
+        t_dir = data_dir / "triggers"
+        if t_dir.exists():
+            for p in t_dir.glob("*.json"):
+                try:
+                    d = json.loads(p.read_text(encoding="utf-8"))
+                    tid = d.get("id") or d.get("trigger_id") or p.stem
+                    store.contexts.put("trigger", tid, 1, d, stored_at=now_ts)
+                except Exception:
+                    pass
+        c_dir = data_dir / "customers"
+        if c_dir.exists():
+            for p in c_dir.glob("*.json"):
+                try:
+                    d = json.loads(p.read_text(encoding="utf-8"))
+                    cid = d.get("customer_id") or d.get("id") or p.stem
+                    store.contexts.put("customer", cid, 1, d, stored_at=now_ts)
+                except Exception:
+                    pass
+        if store.contexts.counts().get("category", 0) > 0:
+            break
 
 _preload_dataset_if_empty()
 
@@ -75,8 +99,6 @@ class ReplyRequest(BaseModel):
     received_at: str | None = None
     turn_number: int | None = None
 
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00","Z")
 
 @app.post("/v1/context")
 async def context_push(req: ContextRequest):
@@ -118,14 +140,16 @@ async def tick(req: TickRequest):
 
 @app.post("/v1/reply")
 async def reply(req: ReplyRequest):
+    _preload_dataset_if_empty()
     state=store.conversations.get(req.conversation_id)
     if state is None:
-        # The local judge exercises standalone reply events as well as replies to tick-created
-        # conversations. Treat an identified merchant's first reply as an unthreaded opening.
-        if not req.merchant_id:
-            return {"action":"end","rationale":"Conversation not found."}
-        state=ConversationState(conversation_id=req.conversation_id,merchant_id=req.merchant_id,
-            customer_id=req.customer_id,send_as="vera")
+        # Default or fallback merchant for unthreaded or interactive UI requests
+        all_merchants = [m.context_id for m in store.contexts.items("merchant")]
+        mid = req.merchant_id or (all_merchants[0] if all_merchants else "m_001_drmeera_dentist_delhi")
+        m_triggers = [t for t in store.contexts.items("trigger") if t.payload.get("merchant_id") == mid]
+        tid = m_triggers[0].context_id if m_triggers else None
+        state=ConversationState(conversation_id=req.conversation_id,merchant_id=mid,
+            customer_id=req.customer_id,trigger_id=tid,send_as="vera",topic="business update")
         store.conversations.put(state)
     if state.status == "ended":
         return {"action":"end","rationale":"This conversation has ended."}
@@ -136,7 +160,17 @@ async def reply(req: ReplyRequest):
     if req.customer_id and state.customer_id and req.customer_id != state.customer_id:
         raise HTTPException(400,detail="customer_id does not match conversation")
     bundle=build_bundle(store,state.trigger_id,req.received_at) if state.trigger_id else None
-    if bundle is None: bundle={"merchant":store.contexts.get("merchant",state.merchant_id) or {},"category":{},"trigger":{},"customer":store.contexts.get("customer",state.customer_id)}
+    if bundle is None:
+        m_payload = store.contexts.get("merchant", state.merchant_id) or {}
+        cat_slug = m_payload.get("category_slug")
+        c_payload = store.contexts.get("category", cat_slug) or {} if cat_slug else {}
+        bundle = {
+            "merchant": m_payload,
+            "category": c_payload,
+            "trigger": store.contexts.get("trigger", state.trigger_id) or {} if state.trigger_id else {},
+            "customer": store.contexts.get("customer", state.customer_id) if state.customer_id else None,
+            "now": req.received_at or settings.default_now
+        }
     from vera.facts import derive_facts
     facts=derive_facts(bundle)
     memory=store.merchant_memory(state.merchant_id)

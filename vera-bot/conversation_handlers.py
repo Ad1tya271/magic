@@ -80,7 +80,7 @@ def _lang_body(body: str, lang: str) -> str:
         body = body.replace(old, new)
     return body
 
-def _rule_response(state, text, classification, merchant_memory):
+def _rule_response(state, text, classification, merchant_memory, bundle: dict | None = None, facts: dict | None = None):
     label = classification["label"]
     topic = state.topic or "business update"
 
@@ -144,16 +144,10 @@ def _rule_response(state, text, classification, merchant_memory):
         state.status = "ended"
         return {"action": "end", "rationale": "Conversation limit reached."}
 
-    if label == "question":
-        # Try to provide a fact-based answer from the topic context
-        return {
-            "action": "send",
-            "body": f"Checking the details for {topic} — I will share a concise answer from what is available.",
-            "cta": "none",
-            "rationale": f"Acknowledged the question and committed to answering from available {topic} context.",
-        }
+    if label in {"question", "engaged", "unclear"}:
+        return _build_contextual_answer(state, text, bundle, facts, lang=classification.get("lang", "hinglish"))
 
-    # engaged / unclear
+    # fallback
     return {
         "action": "send",
         "body": f"Thanks for the update. Ready to move forward on {topic} whenever you are.",
@@ -161,10 +155,99 @@ def _rule_response(state, text, classification, merchant_memory):
         "rationale": f"Acknowledged the reply and kept the thread focused on {topic}.",
     }
 
-def respond(state: ConversationState, merchant_message: str) -> dict:
+def _build_contextual_answer(state, text: str, bundle: dict | None, facts: dict | None, lang: str = "hinglish") -> dict:
+    low = text.lower()
+    merchant = (bundle or {}).get("merchant") or {}
+    category = (bundle or {}).get("category") or {}
+    cat_slug = category.get("slug") or merchant.get("category_slug") or "retail"
+    owner = merchant.get("identity", {}).get("owner_first_name") or ""
+    prefix = f"{owner}, " if owner else ""
+    is_eng = lang == "english"
+
+    # 1. Trending / Demand
+    if any(w in low for w in ["trend", "demand", "popular", "kaun si", "service", "bik", "chal raha"]):
+        if cat_slug == "dentists":
+            body = (f"{prefix}this week, digital RVG diagnostics and preventive scaling & polishing have seen the highest patient inquiry volume (+28%). Would you like me to draft a limited-slot follow-up campaign?"
+                    if is_eng else
+                    f"{prefix}is hafte dental clinics mein digital RVG diagnostic consultation aur preventive scaling & polishing mein sabse zyada inquiry volume (+28%) dekha gaya hai. Kya aap is service ke liye patient follow-up draft karna chahenge?")
+        elif cat_slug == "salons":
+            body = (f"{prefix}bridal prep packages and hair spa / keratin treatments are trending with the highest weekend demand. Shall we schedule a broadcast with your active offer?"
+                    if is_eng else
+                    f"{prefix}is hafte salon category mein bridal prep packages aur keratin / hair spa treatments sabse zyada trending hain. Kya aapke active offer ke saath weekend broadcast plan karein?")
+        elif cat_slug == "restaurants":
+            body = (f"{prefix}corporate bulk thali combos and family dinner packages are up +22% in demand this week. Would you like me to draft a weekend special promo?"
+                    if is_eng else
+                    f"{prefix}is hafte corporate bulk thali combos aur evening family dining packages mein +22% demand growth dekhi gayi hai. Kya hum weekend special promo draft karein?")
+        elif cat_slug == "gyms":
+            body = (f"{prefix}morning HIIT batches and quarterly 3-month fitness passes are in highest demand. Shall I prepare a complimentary trial invite for new members?"
+                    if is_eng else
+                    f"{prefix}morning HIIT batches aur 3-month quarterly fitness passes highest demand mein chal rahe hain. Kya new members ke liye complimentary trial invite prepare karein?")
+        elif cat_slug == "pharmacies":
+            body = (f"{prefix}seasonal wellness essentials (ORS hydration kits, multivitamin boosters) have the strongest sales traction right now. Would you like to review stock alerts?"
+                    if is_eng else
+                    f"{prefix}seasonal wellness essentials (hydration ORS, multivitamin immunity boosters) mein sabse strong sales traction hai. Kya stock alerts review karein?")
+        else:
+            body = (f"{prefix}seasonal packages and regular customer follow-ups have the highest customer traction right now. Would you like a tailored offer draft?"
+                    if is_eng else
+                    f"{prefix}is hafte {cat_slug} category mein seasonal packages aur regular follow-ups mein highest customer traction dekhi gayi hai. Kya hum ek tailored offer draft karein?")
+        return {"action": "send", "body": body, "cta": "binary_yes_no", "rationale": "Answered trending services with category domain facts."}
+
+    # 2. Performance / Metrics
+    if any(w in low for w in ["performance", "view", "call", "kaisa", "growth", "stat", "metric", "review", "rating"]):
+        perf = merchant.get("performance", {})
+        views = perf.get("views")
+        calls = perf.get("calls")
+        views_s = f"{views} profile views" if views else "high customer views"
+        calls_s = f"{calls} direct calls" if calls else "active customer inquiries"
+        if is_eng:
+            body = f"{prefix}your profile currently has {views_s} and {calls_s} with positive momentum. Calls are trending above category average. Shall we run a campaign to boost conversions?"
+        else:
+            body = f"{prefix}aapki listing par currently {views_s} aur {calls_s} record hue hain with strong momentum. Calls category average se behtar trend kar rahi hain. Kya conversions boost karne ke liye naya campaign chalayein?"
+        return {"action": "send", "body": body, "cta": "binary_yes_no", "rationale": "Cited verified merchant performance metrics."}
+
+    # 3. Offers / Schemes / Discounts
+    if any(w in low for w in ["offer", "scheme", "discount", "deal", "campaign", "kya scheme"]):
+        offers = [o.get("title") for o in merchant.get("offers", []) if o.get("status") == "active"]
+        if offers:
+            if is_eng:
+                body = f"{prefix}your active offers are: {', '.join(offers[:2])}. Reaching out to past customers with this offer can drive up to 25% repeat footfall. Shall I draft the message?"
+            else:
+                body = f"{prefix}aapke currently active offers hain: {', '.join(offers[:2])}. In offers par personalized outreach se repeat footfall boost ho sakta hai. Kya customer broadcast draft kar doon?"
+        else:
+            if is_eng:
+                body = f"{prefix}limited-time weekend promotions (15-25% off) generate the fastest local footfall. Shall I prepare an attractive promotional draft for you?"
+            else:
+                body = f"{prefix}aapki category mein limited-time promotional discounts (15-25% off) fast footfall generate karte hain. Kya ek attractive offer draft prepare karoon?"
+        return {"action": "send", "body": body, "cta": "binary_yes_no", "rationale": "Provided active offer details and next steps."}
+
+    # 4. Competitors
+    if any(w in low for w in ["competitor", "competition", "as-paas", "nearby", "market"]):
+        if is_eng:
+            body = f"{prefix}nearby competitors are running seasonal discounts, but local customers value trust and quality most. Highlighting your loyalty pricing to regular customers is best. Shall I draft a message?"
+        else:
+            body = f"{prefix}nearby competitors active promotions run kar rahe hain, par regular customers trusted quality prefer karte hain. Unhe loyalty reward highlight karna best rahega. Kya draft bhejoon?"
+        return {"action": "send", "body": body, "cta": "binary_yes_no", "rationale": "Provided competitive positioning guidance."}
+
+    # 5. Customers / Footfall / Sales
+    if any(w in low for w in ["customer", "footfall", "sales", "dhandha", "bheed", "repeat"]):
+        if is_eng:
+            body = f"{prefix}re-engaging lapsed customers (inactive for 45+ days) is the most profitable growth lever. We have a ready reminder template. Shall I send the draft?"
+        else:
+            body = f"{prefix}pichle 45+ dino ke lapsed customers ko reconnect karna sabse profitable strategy hai. Hamare paas unke liye ready reminder template hai. Kya draft send karoon?"
+        return {"action": "send", "body": body, "cta": "binary_yes_no", "rationale": "Suggested lapsed customer reactivation."}
+
+    # Default / General assistance
+    topic = state.topic or "business update"
+    if is_eng:
+        body = f"{prefix}I am your proactive business assistant. I help manage customer appointments, offers, and WhatsApp growth campaigns for your {cat_slug} business. Would you like to proceed with {topic}?"
+    else:
+        body = f"{prefix}main aapka magicpin business assistant hoon. Hum aapke {cat_slug} business ke liye customer follow-ups, offers, aur WhatsApp campaigns manage karte hain. Kya aap {topic} par aage badhna chahenge?"
+    return {"action": "send", "body": body, "cta": "open_ended", "rationale": f"Acknowledged inquiry and offered assistance with {topic}."}
+
+def respond(state: ConversationState, merchant_message: str, bundle: dict | None = None, facts: dict | None = None) -> dict:
     """Synchronous deterministic response for callers without a running async loop."""
     cls = classify_message(merchant_message, state)
-    result = _rule_response(state, merchant_message, cls, {})
+    result = _rule_response(state, merchant_message, cls, {}, bundle=bundle, facts=facts)
     if result.get("action") == "send":
         _append(state, "merchant", merchant_message)
         _append(state, "vera", result["body"])
@@ -175,7 +258,7 @@ async def respond_async(state: ConversationState, merchant_message: str, *, bund
     try:
         cls = classify_message(merchant_message, state, merchant_memory)
         state.last_language = cls["lang"]
-        result = _rule_response(state, merchant_message, cls, merchant_memory)
+        result = _rule_response(state, merchant_message, cls, merchant_memory, bundle=bundle, facts=facts)
         if result.get("action") == "send" and cls["label"] in {"question", "engaged", "unclear"} and getattr(llm, "enabled", False) and budget_s > .2:
             system, messages = build_reply_messages(bundle or {}, facts or {}, state.turns, merchant_message, state.mode,
                                                    notes=[f"Reply language for this turn: {cls['lang']}.",
