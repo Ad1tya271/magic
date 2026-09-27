@@ -413,6 +413,23 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       transition: background 0.15s ease;
     }
     .api-link:hover { background: rgba(56, 189, 248, 0.15); }
+    .merchant-select {
+      width: 100%;
+      background: #1e293b;
+      color: #f8fafc;
+      border: 1px solid var(--card-border);
+      padding: 0.65rem 0.85rem;
+      border-radius: 10px;
+      font-family: inherit;
+      font-size: 0.85rem;
+      margin-top: 0.25rem;
+      margin-bottom: 0.75rem;
+      outline: none;
+      cursor: pointer;
+    }
+    .merchant-select:focus {
+      border-color: var(--accent-green);
+    }
   </style>
 </head>
 <body>
@@ -454,18 +471,24 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         </div>
       </div>
 
+      <div class="panel-title" style="margin-top: 0.5rem;">Select Active Merchant Profile</div>
+      <select id="merchant-selector" class="merchant-select" onchange="switchMerchant(this.value)">
+        <option value="m_001_drmeera_dentist_delhi">🦷 Dr. Meera — Sparkle Dental Clinic (Dentist, Delhi)</option>
+        <option value="m_005_pizzajunction_restaurant_delhi">🍕 Suresh — SK Pizza Junction (Restaurant, Delhi)</option>
+        <option value="m_003_studio11_salon_hyderabad">✂️ Lakshmi — Studio11 Family Salon (Salon, Hyderabad)</option>
+        <option value="m_008_zenyoga_gym_chennai">🧘 Padma — Zen Yoga Studio (Gym & Yoga, Chennai)</option>
+        <option value="m_009_apollo_pharmacy_jaipur">💊 Ramesh — Apollo Health Plus (Pharmacy, Jaipur)</option>
+      </select>
+
       <div class="panel-title" style="margin-top: 0.5rem;">Simulation Actions</div>
       <div class="sim-controls">
         <button class="btn btn-primary" onclick="simulateTick()">⚡ Trigger Proactive Wakeup (Tick)</button>
         <button class="btn btn-secondary" onclick="resetState()">↺ Reset Context Store (Teardown)</button>
       </div>
 
-      <div class="panel-title" style="margin-top: 0.5rem;">Quick Merchant Replies</div>
-      <div class="quick-replies">
-        <span class="chip" onclick="sendQuickReply('Ok lets do it. Whats next?')">"Ok lets do it"</span>
-        <span class="chip" onclick="sendQuickReply('Is hafte kaun si service demand mein rahi?')">"Which service is trending?"</span>
-        <span class="chip" onclick="sendQuickReply('Can you help with my GST tax filing?')">"Can you help with GST?"</span>
-        <span class="chip" onclick="sendQuickReply('Stop messaging me')">"Stop messaging me"</span>
+      <div class="panel-title" style="margin-top: 0.5rem;">Interactive Dialogue Chips</div>
+      <div class="quick-replies" id="quick-replies-container">
+        <!-- Dynamically rendered based on active merchant -->
       </div>
 
       <div class="panel-title" style="margin-top: 0.5rem;">REST API Surface</div>
@@ -479,18 +502,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     <!-- Right: WhatsApp Phone Simulator -->
     <div class="phone-container">
       <div class="phone-header">
-        <div class="avatar">V</div>
+        <div class="avatar" id="phone-avatar">V</div>
         <div class="phone-info">
-          <div class="phone-name">Vera (magicpin partner) <span class="verified-check">✓</span></div>
-          <div class="phone-status" id="chat-sub">active conversation</div>
+          <div class="phone-name" id="phone-header-title">Vera (magicpin partner) <span class="verified-check">✓</span></div>
+          <div class="phone-status" id="chat-sub">active with Dr. Meera (Dentist, Delhi)</div>
         </div>
       </div>
 
       <div class="chat-box" id="chat-box">
-        <div class="bubble bubble-bot">
-          Hello! I am Vera, your proactive retail business engine. Press "Trigger Proactive Wakeup" above to simulate an outbound trigger, or type a reply below.
-          <div class="bubble-time">10:00 AM</div>
-        </div>
+        <!-- Messages rendered here -->
       </div>
 
       <div class="chat-input-bar">
@@ -503,6 +523,113 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   <script>
     let activeConversationId = "conv_demo_1";
     let activeMerchantId = "m_001_drmeera_dentist_delhi";
+
+    const MERCHANT_PROFILES = {
+      "m_001_drmeera_dentist_delhi": {
+        name: "Dr. Meera",
+        business: "Sparkle Dental Clinic",
+        category: "Dentist",
+        locality: "Lajpat Nagar, Delhi",
+        greeting: "Dr. Meera, JIDA's Oct study is in: 3-month fluoride recalls cut caries 38% better in high-risk adults. You have 78 lapsed patients due for scaling. We can offer a ₹299 Dental Cleaning recall (Option A), or share an Aligners vs Braces guide (Option B). Which sounds best for this week?",
+        chips: [
+          "Is hafte dental mein kya trending hai?",
+          "JIDA research study ke baare mein batao",
+          "Option A ke saath chalte hain",
+          "Option B content guide bhejo",
+          "Competitor Smile Studio se kaise compete karein?",
+          "Meri profile ka performance kaisa hai?"
+        ]
+      },
+      "m_005_pizzajunction_restaurant_delhi": {
+        name: "Suresh",
+        business: "SK Pizza Junction",
+        category: "Restaurant",
+        locality: "Sant Nagar, Delhi",
+        greeting: "Suresh ji, local dining searches show weekend pizza & thali combos up +24% YoY. Your active offer is 'Buy 1 Get 1 Free (Tue-Thu)'. We can push a weekend dining special (Option 1) or corporate lunch packages (Option 2). What would you like to prioritize?",
+        chips: [
+          "Mid-week dining footfall kaise badhayein?",
+          "Option 1 (Weekend promo)",
+          "Option 2 (Corporate lunch)",
+          "IPL match nights par kya offer chalayein?",
+          "Aapke paas kya scheme ya offer hai?",
+          "Meri dukaan ka performance kaisa hai?"
+        ]
+      },
+      "m_003_studio11_salon_hyderabad": {
+        name: "Lakshmi",
+        business: "Studio11 Family Salon",
+        category: "Salon",
+        locality: "Kapra, Hyderabad",
+        greeting: "Lakshmi ji, bridal season demand is up +48% YoY and Saturday 4-8pm booking volume is peaking. You have 220 lapsed clients. We can send a Hair Spa @ ₹499 + Haircut @ ₹99 invite (Option 1) or launch a Bridal Trial @ ₹999 package (Option 2). Which one shall we run?",
+        chips: [
+          "Bridal season ke liye kya trending hai?",
+          "Option 1 (Hair Spa @ ₹499)",
+          "Option 2 (Bridal Trial @ ₹999)",
+          "220 lapsed clients ko kaise reactivate karein?",
+          "Aas-paas ke competitor kya de rahe hain?",
+          "Aapke paas kya scheme ya offer hai?"
+        ]
+      },
+      "m_008_zenyoga_gym_chennai": {
+        name: "Padma",
+        business: "Zen Yoga Studio",
+        category: "Gym & Yoga",
+        locality: "Mylapore, Chennai",
+        greeting: "Padma ji, morning 6-8am HIIT & strength queries are up +40% YoY. Your active offer is 'First Month @ ₹499' with free body analysis. We can run a 3-day guest trial pass (Option 1) or a 4-week Kids Yoga summer camp (Option 2). Which sounds exciting?",
+        chips: [
+          "Morning HIIT batch demand ka data batao",
+          "Kids yoga summer camp plan kaisa rahega?",
+          "Option 1 (3-day trial pass)",
+          "Option 2 (Summer camp program)",
+          "Members retention kaise improve karein?",
+          "Meri listing ka CTR aur calls kaisa hai?"
+        ]
+      },
+      "m_009_apollo_pharmacy_jaipur": {
+        name: "Ramesh",
+        business: "Apollo Health Plus Pharmacy",
+        category: "Pharmacy",
+        locality: "Malviya Nagar, Jaipur",
+        greeting: "Ramesh ji, seasonal hydration ORS kits and chronic medication refills have the strongest repeat volume (+38% YoY). Your active offers include 'Free Delivery > ₹499' and 'Senior Citizen 15% OFF'. We can automate monthly chronic refills (Option 1) or family wellness kits (Option 2). What should we do?",
+        chips: [
+          "Seasonal ORS hydration essentials mein kya chal raha hai?",
+          "Chronic medication refill kaise schedule karein?",
+          "Option 1 (Monthly refill delivery)",
+          "Option 2 (Family wellness kit)",
+          "Senior citizen 15% discount push karo",
+          "Meri calls aur directions ki performance kaisa hai?"
+        ]
+      }
+    };
+
+    function renderChips(chips) {
+      const container = document.getElementById('quick-replies-container');
+      container.innerHTML = '';
+      chips.forEach(text => {
+        const span = document.createElement('span');
+        span.className = 'chip';
+        span.textContent = `"${text}"`;
+        span.onclick = () => sendQuickReply(text);
+        container.appendChild(span);
+      });
+    }
+
+    function switchMerchant(mid) {
+      activeMerchantId = mid;
+      activeConversationId = "conv_" + mid.substring(0, 10) + "_" + Date.now();
+      const profile = MERCHANT_PROFILES[mid] || MERCHANT_PROFILES["m_001_drmeera_dentist_delhi"];
+      
+      document.getElementById('chat-sub').textContent = `active with ${profile.name} (${profile.category}, ${profile.locality.split(',')[1] || profile.locality})`;
+      renderChips(profile.chips);
+
+      const chat = document.getElementById('chat-box');
+      chat.innerHTML = `
+        <div class="bubble bubble-bot">
+          ${profile.greeting}
+          <div class="bubble-time">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+        </div>
+      `;
+    }
 
     async function updateMetrics() {
       try {
@@ -519,6 +646,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     }
     setInterval(updateMetrics, 5000);
     updateMetrics();
+
+    // Initialize with Dr. Meera
+    switchMerchant("m_001_drmeera_dentist_delhi");
 
     function appendMessage(role, text, tag = '') {
       const chat = document.getElementById('chat-box');
@@ -538,7 +668,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     }
 
     async function simulateTick() {
-      appendMessage('bot', '⚡ Processing simulated tick wake-up...');
+      appendMessage('bot', '⚡ Processing simulated tick wake-up for ' + activeMerchantId + '...');
       try {
         const res = await fetch('/v1/tick', {
           method: 'POST',
@@ -586,7 +716,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         }).then(r => r.json());
 
         if (res.action === 'send') {
-          appendMessage('bot', res.body, `Action: send | CTA: ${res.cta || 'none'}`);
+          appendMessage('bot', res.body, `Action: send | Mode: ${res.cta || 'interactive'}`);
         } else if (res.action === 'wait') {
           appendMessage('bot', `⏱ [Bot scheduled to pause for ${res.wait_seconds}s]`, `Action: wait`);
         } else if (res.action === 'end') {
@@ -600,12 +730,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
     async function resetState() {
       await fetch('/v1/teardown', { method: 'POST' });
-      document.getElementById('chat-box').innerHTML = `
-        <div class="bubble bubble-bot">
-          State reset cleanly. Trigger a tick to re-evaluate.
-          <div class="bubble-time">10:00 AM</div>
-        </div>
-      `;
+      switchMerchant(activeMerchantId);
       updateMetrics();
     }
   </script>
