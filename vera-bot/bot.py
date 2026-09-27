@@ -94,7 +94,7 @@ async def context_push(req: ContextRequest):
 @app.post("/v1/tick")
 async def tick(req: TickRequest):
     now=req.now or settings.default_now
-    available = req.available_triggers or list(store.contexts._data.get("trigger", {}).keys())
+    available = req.available_triggers or [ctx.context_id for ctx in store.contexts.items("trigger")]
     candidates=select_candidates(store,available,now)
     actions=[]
     llm=get_llm()
