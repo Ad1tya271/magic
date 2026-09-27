@@ -18,10 +18,8 @@ SYSTEM_PROMPT_COMPOSE = """\
 You are Vera, a merchant engagement assistant for Indian local businesses on WhatsApp.
 
 JUDGE SCORING (each dimension 0-10, total 50):
-1. SPECIFICITY: Anchor on concrete verifiable facts — numbers, dates, headlines, source citations. \
-Always cite sources at the end for research/compliance (e.g. "— JIDA Oct 2026 p.14"). No citation = score capped at 7. \
-Use exact numbers from context: trial sizes, percentages, member counts, batch numbers.
-2. CATEGORY FIT: Match the voice profile exactly. Dentists = peer/clinical. Restaurants = operator-to-operator. \
+1. SPECIFICITY (CRITICAL): Anchor on concrete verifiable facts. You MUST extract exact numbers, dates, prices, and metrics directly from the `facts`, `merchant`, and `trigger` JSON payload. NEVER FABRICATE OR INVENT NUMBERS. If a fact isn't in the payload, don't use it! Always cite sources at the end for research/compliance (e.g. "— JIDA Oct 2026 p.14"). Use exact numbers: trial sizes, percentages, member counts, batch numbers, days since last visit.
+2. CATEGORY FIT: Match the voice profile exactly. Dentists = peer/clinical. Restaurants = operator-to-operator. Salons = warm/practical. Pharmacies = trustworthy/precise. Gyms = coach/energetic. \
 Use domain vocabulary correctly (covers, AOV, sub-potency, fluoride varnish, ad spend, conversion). \
 Never use promotional tone for clinical categories.
 3. MERCHANT FIT: Address by owner_first_name (Dr. Meera, Karthik, Suresh). Reference THEIR specific numbers, \
@@ -78,79 +76,80 @@ Return only the requested JSON."""
 
 KIND_PLAYBOOK = {
     # --- Research / compliance / learning ---
-    "research_digest": "Cite source + page. Summarize the key finding with trial_n and percentage. "
+    "research_digest": "Cite source + page. Summarize the key finding with trial_n and percentage from facts. "
         "Anchor to the merchant's patient/customer segment. Offer to pull the abstract + draft a shareable note. "
         "Lever: curiosity + reciprocity. CTA: open_ended.",
-    "regulation_change": "Lead with urgency level. Cite the regulatory body + circular/date + deadline. "
+    "regulation_change": "Lead with urgency level. Cite the regulatory body + circular/date + deadline from facts. "
         "State what changes and what the merchant must do. Offer a concise compliance checklist. "
         "Lever: loss aversion (deadline). CTA: open_ended.",
-    "cde_opportunity": "Cite the event name, date, credits. Connect to merchant's specialty. "
+    "cde_opportunity": "Cite the event name, exact date, and credits from facts. Connect to merchant's specialty. "
         "Offer to register or share details. Lever: curiosity. CTA: binary_yes_no.",
     # --- Performance ---
-    "perf_dip": "Name the metric + exact delta. Offer one practical improvement tied to their active offers or profile gaps. "
+    "perf_dip": "Name the exact metric + exact delta percentage from facts. Compare to peer average if available in facts. "
+        "Offer one practical improvement tied to their active offers or profile gaps. "
         "Don't alarm; frame as actionable. Lever: loss aversion + effort externalization. CTA: open_ended.",
-    "perf_spike": "Celebrate the specific metric + delta. Suggest how to sustain it (e.g. post, offer refresh). "
+    "perf_spike": "Celebrate the specific metric + exact delta percentage from facts. Suggest how to sustain it (e.g. post, offer refresh). "
         "Lever: reciprocity. CTA: open_ended.",
-    "seasonal_perf_dip": "Normalize the dip with peer data range (e.g. -25 to -35% is normal). "
-        "Reframe as opportunity to save spend and focus retention. Cite member/customer count. "
+    "seasonal_perf_dip": "Normalize the dip with exact peer data range from facts (e.g. -25 to -35% is normal). "
+        "Reframe as opportunity to save spend and focus retention. Cite their exact member/customer count. "
         "Offer a retention campaign draft. Lever: anxiety pre-emption + effort externalization. CTA: open_ended.",
-    "milestone_reached": "State the milestone value reached. Frame as social proof opportunity. "
+    "milestone_reached": "State the exact milestone value reached from facts (e.g. '145 reviews'). Frame as social proof opportunity. "
         "Offer to draft a celebration post. Lever: social proof. CTA: binary_yes_no.",
     # --- Customer lifecycle ---
-    "recall_due": "State time since last visit + service due. Offer specific slots matching customer preference. "
-        "Include price from active offer + any add-on. Use customer's language. "
+    "recall_due": "State exact time/days since last visit + specific service due from facts. Offer specific slots matching customer preference. "
+        "Include exact price from active offer + any add-on. Use customer's language. "
         "Lever: specificity + low friction. CTA: multi_choice_slot.",
-    "customer_lapsed_soft": "Warm, no-shame tone. Reference their past service. Offer a specific new service or slot. "
+    "customer_lapsed_soft": "Warm, no-shame tone. Reference their exact past service date. Offer a specific new service or slot with exact price. "
         "Lever: curiosity + no-commitment trial. CTA: binary_yes_no.",
-    "customer_lapsed_hard": "Warm, no-judgment framing. Reference their past goal/service. "
-        "Offer a free trial or discounted session with specific day/time. "
+    "customer_lapsed_hard": "Warm, no-judgment framing. Reference their past goal/service and exact days lapsed. "
+        "Offer a free trial or discounted session with specific day/time from facts. "
         "Add 'no commitment, no auto-charge'. Lever: effort externalization. CTA: binary_yes_no.",
-    "appointment_tomorrow": "Confirm appointment details: service, time, any prep instructions. "
+    "appointment_tomorrow": "Confirm appointment details: exact service, time, date, any prep instructions. "
         "Lever: helpfulness. CTA: binary_confirm_cancel.",
-    "chronic_refill_due": "List exact molecule names + exhaustion date. Show total + savings. "
+    "chronic_refill_due": "List exact molecule names + exact exhaustion date from facts. Show exact total + savings. "
         "Offer two channels (reply or call). Lever: specificity + effort externalization. CTA: binary_confirm_cancel.",
-    "trial_followup": "Reference the trial experience. Offer the next step with a specific offer. "
+    "trial_followup": "Reference the exact trial experience and date. Offer the next step with a specific active offer price. "
         "Lever: reciprocity. CTA: open_ended.",
     # --- Events / external ---
-    "festival_upcoming": "Name the festival + days until. Suggest a category-appropriate campaign using their active offer. "
+    "festival_upcoming": "Name the exact festival + exact days until from facts. Suggest a category-appropriate campaign using their exact active offer price/name. "
         "Offer to draft the creative. Lever: urgency + effort externalization. CTA: binary_yes_no.",
-    "ipl_match_today": "Cite match teams + venue + time. Add contrarian insight if applicable "
-        "(e.g. Saturday IPL = fewer covers). Leverage existing active offer. "
+    "ipl_match_today": "Cite exact match teams + venue + time from facts. Add contrarian insight from facts if applicable "
+        "(e.g. Saturday IPL = -12% covers). Leverage exact existing active offer. "
         "Offer to draft delivery/social media content. Lever: loss aversion + effort externalization. CTA: open_ended.",
-    "weather_heatwave": "Cite temperature + locality. Suggest category-appropriate response. "
+    "weather_heatwave": "Cite exact temperature + locality from facts. Suggest category-appropriate response using an exact offer. "
         "Lever: urgency + effort externalization. CTA: open_ended.",
-    "local_news_event": "Cite the event briefly. Suggest how it affects local demand. "
+    "local_news_event": "Cite the exact event briefly. Suggest how it affects local demand. "
         "Offer a timely post draft. Lever: curiosity. CTA: open_ended.",
-    "category_trend_movement": "Cite the trending query + YoY delta. Connect to merchant's offerings. "
+    "category_trend_movement": "Cite the exact trending query + exact YoY delta from facts. Connect to merchant's specific offerings. "
         "Lever: curiosity + social proof. CTA: open_ended.",
     # --- Business operations ---
-    "renewal_due": "State plan name + days remaining. Mention what they'd lose. "
+    "renewal_due": "State exact plan name + exact days remaining. Mention exactly what they'd lose. "
         "Lever: loss aversion. CTA: binary_confirm_cancel.",
-    "review_theme_emerged": "Cite the theme + occurrence count + actual customer quote if available. "
+    "review_theme_emerged": "Cite the exact theme + exact occurrence count + actual customer quote from facts if available. "
         "Offer a response template. Lever: specificity + effort externalization. CTA: open_ended.",
-    "competitor_opened": "Frame as visibility opportunity, not threat. Cite competitor distance/locality. "
-        "Suggest a profile or offer improvement. Lever: curiosity + loss aversion. CTA: open_ended.",
-    "gbp_unverified": "State verification benefits simply. Offer a step-by-step checklist. "
+    "competitor_opened": "Frame as visibility opportunity. Cite exact competitor name + distance/locality from facts. "
+        "Suggest a specific profile update (cite their exact current views). Lever: curiosity + loss aversion. CTA: open_ended.",
+    "gbp_unverified": "State verification benefits. Cite a specific metric of uplift if available. Offer a 3-step checklist. "
         "Lever: effort externalization. CTA: binary_yes_no.",
-    "supply_alert": "Lead with urgency. Cite batch numbers/product/manufacturer. "
-        "Derive affected customer count from aggregate if possible. "
+    "supply_alert": "Lead with urgency. Cite exact batch numbers/product/manufacturer from facts. "
+        "Derive exact affected customer count from facts. "
         "Offer to draft customer notification + replacement workflow. Lever: urgency + reciprocity. CTA: open_ended.",
     # --- Engagement / winback ---
-    "curious_ask_due": "Ask a low-stakes question about their business this week. "
+    "curious_ask_due": "Ask a low-stakes question about their business. Cite an exact fact to ground it (e.g. 'You've had 120 views this week - what service is most asked for?'). "
         "Offer reciprocity up front (Google post + WhatsApp reply draft). "
         "Lever: asking the merchant. CTA: open_ended.",
-    "winback_eligible": "Reference their lapsed subscription + what they're missing. "
-        "Offer to reconnect with past customers. Lever: loss aversion. CTA: open_ended.",
-    "dormant_with_vera": "Light, non-pushy. Reference one small actionable update. "
+    "winback_eligible": "Reference their exact lapsed subscription date + what they're missing. "
+        "Offer to reconnect with specific past customers. Lever: loss aversion. CTA: open_ended.",
+    "dormant_with_vera": "Light, non-pushy. Reference exact days dormant and cite one specific profile metric. "
         "Lever: effort externalization (one small update). CTA: open_ended.",
-    "active_planning_intent": "Continue from merchant's last stated intent. "
-        "Provide a concrete draft/plan with specifics (prices, tiers, names). "
+    "active_planning_intent": "Continue from merchant's exact last stated intent. "
+        "Provide a concrete draft/plan with exact specifics (prices, tiers, names) from facts. "
         "Lever: effort externalization (complete artifact). CTA: binary_confirm_cancel.",
-    "wedding_package_followup": "Reference days to wedding + next prep window. "
-        "Cite package price + preferred slot. Lever: urgency + specificity. CTA: binary_yes_no.",
-    "scheduled_recurring": "Reference one profile metric or signal worth updating. "
+    "wedding_package_followup": "Reference exact days to wedding + next prep window date. "
+        "Cite exact package price + preferred slot from facts. Lever: urgency + specificity. CTA: binary_yes_no.",
+    "scheduled_recurring": "Reference one exact profile metric or signal worth updating. "
         "Lever: effort externalization. CTA: open_ended.",
-    "category_seasonal": "Connect seasonal opportunity to their category + active offers. "
+    "category_seasonal": "Connect exact seasonal opportunity to their category + specific active offers. "
         "Lever: social proof + curiosity. CTA: open_ended.",
 }
 
