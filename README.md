@@ -121,11 +121,11 @@ cd vera-bot
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `GET` | `/` | Web UI (Chat-first conversational interface) |
-| `GET` | `/v1/merchants` | List available merchants, business details, active offers, and suggestions |
-| `POST` | `/v1/reply` | Multi-turn conversational endpoint with vendor selection and dialogue |
-| `POST` | `/v1/tick` | Proactive wakeup endpoint evaluating active triggers and composing messages |
-| `POST` | `/v1/context` | Push dynamic category, merchant, trigger, or customer context updates |
-| `POST` | `/v1/teardown` | Reset in-memory conversation state and store caches |
-| `GET` | `/v1/healthz` | System uptime and loaded context counts |
-| `GET` | `/v1/metadata` | Team and model metadata |
+| `GET` | `/` | Web UI (Chat-first conversational interface)
+| `GET` | `/v1/merchants` | List available merchants, business details, active offers, and suggestions
+| `POST` | `/v1/reply` | Multi-turn conversational endpoint with vendor selection and dialogue
+| `POST` | `/v1/tick` | Proactive wakeup endpoint evaluating active triggers and composing messages
+| `POST` | `/v1/context` | Push dynamic category, merchant, trigger, or customer context updates
+| `POST` | `/v1/teardown` | Reset in-memory conversation state and store caches
+| `GET` | `/v1/healthz` | System uptime and loaded context counts
+| `GET` | `/v1/metadata` | Team and model metadata
