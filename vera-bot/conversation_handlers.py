@@ -26,6 +26,7 @@ class ConversationState:
     unanswered_nudges: int = 0
     last_language: str = "english"
     topic: str = "business update"
+    conv_state: str = "CONVERSING"
 
 _OPT_OUT = ("stop", "unsubscribe", "not interested", "don't message", "do not message", "band karo", "mat bhejo", "nahi chahiye")
 _AUTO = ("thanks for reaching out", "thank you for contacting", "we are currently closed", "we'll get back to you", "we will get back to you", "office hours", "auto-reply", "automatic reply")
