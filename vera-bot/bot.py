@@ -39,7 +39,7 @@ def _preload_dataset_if_empty():
         if cat_dir.exists():
             for p in cat_dir.glob("*.json"):
                 try:
-                    store.contexts.put("category", p.stem, 1, json.loads(p.read_text(encoding="utf-8")), stored_at=now_ts)
+                    store.contexts.put("category", p.stem, 0, json.loads(p.read_text(encoding="utf-8")), stored_at=now_ts)
                 except Exception:
                     pass
         m_dir = data_dir / "merchants"
@@ -48,7 +48,7 @@ def _preload_dataset_if_empty():
                 try:
                     d = json.loads(p.read_text(encoding="utf-8"))
                     mid = d.get("merchant_id") or d.get("id") or p.stem
-                    store.contexts.put("merchant", mid, 1, d, stored_at=now_ts)
+                    store.contexts.put("merchant", mid, 0, d, stored_at=now_ts)
                 except Exception:
                     pass
         t_dir = data_dir / "triggers"
@@ -57,7 +57,7 @@ def _preload_dataset_if_empty():
                 try:
                     d = json.loads(p.read_text(encoding="utf-8"))
                     tid = d.get("id") or d.get("trigger_id") or p.stem
-                    store.contexts.put("trigger", tid, 1, d, stored_at=now_ts)
+                    store.contexts.put("trigger", tid, 0, d, stored_at=now_ts)
                 except Exception:
                     pass
         c_dir = data_dir / "customers"
@@ -66,7 +66,7 @@ def _preload_dataset_if_empty():
                 try:
                     d = json.loads(p.read_text(encoding="utf-8"))
                     cid = d.get("customer_id") or d.get("id") or p.stem
-                    store.contexts.put("customer", cid, 1, d, stored_at=now_ts)
+                    store.contexts.put("customer", cid, 0, d, stored_at=now_ts)
                 except Exception:
                     pass
         if store.contexts.counts().get("category", 0) > 0:
