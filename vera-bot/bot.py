@@ -7,6 +7,7 @@ import uuid
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from vera.config import settings
@@ -15,9 +16,44 @@ from conversation_handlers import ConversationState, respond_async
 from vera.llm import get_llm
 from vera.planner import build_bundle, select_candidates
 from vera.store import SCOPES, store
+from vera.ui import DASHBOARD_HTML
 
 app = FastAPI(title="Vera Bot", version=settings.version)
 _STARTED=time.monotonic()
+
+def _preload_dataset_if_empty():
+    if store.contexts.counts().get("category", 0) > 0:
+        return
+    from pathlib import Path
+    import json
+    data_dir = Path(__file__).resolve().parent / "data" / "expanded"
+    if not data_dir.exists():
+        return
+    for p in (data_dir / "categories").glob("*.json"):
+        try: store.contexts.put("category", p.stem, 1, json.loads(p.read_text(encoding="utf-8")))
+        except Exception: pass
+    for p in (data_dir / "merchants").glob("*.json"):
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+            if d.get("merchant_id"): store.contexts.put("merchant", d["merchant_id"], 1, d)
+        except Exception: pass
+    for p in (data_dir / "triggers").glob("*.json"):
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+            if d.get("id"): store.contexts.put("trigger", d["id"], 1, d)
+        except Exception: pass
+    for p in (data_dir / "customers").glob("*.json"):
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+            if d.get("customer_id"): store.contexts.put("customer", d["customer_id"], 1, d)
+        except Exception: pass
+
+_preload_dataset_if_empty()
+
+@app.get("/", response_class=HTMLResponse)
+async def index():
+    _preload_dataset_if_empty()
+    return HTMLResponse(DASHBOARD_HTML)
 
 class ContextRequest(BaseModel):
     scope: str
@@ -58,7 +94,8 @@ async def context_push(req: ContextRequest):
 @app.post("/v1/tick")
 async def tick(req: TickRequest):
     now=req.now or settings.default_now
-    candidates=select_candidates(store,req.available_triggers,now)
+    available = req.available_triggers or list(store.contexts._data.get("trigger", {}).keys())
+    candidates=select_candidates(store,available,now)
     actions=[]
     llm=get_llm()
     for candidate in candidates:
